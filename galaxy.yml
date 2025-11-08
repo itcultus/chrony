@@ -1,19 +1,25 @@
 ---
 # galaxy.yml
 namespace: itcultus
-name: <>
-version: 0.0.0
+name: chrony
+version: 1.0.0
 readme: README.md
 authors:
   - Peter Tselios <myemail@mycompany.com>
 description: >-
-  A collection for <>
+  Configures the Chrony NTP service on target hosts.
+  Allows specifying explicit NTP servers or pools. If pools are defined, server
+  entries are ignored. Otherwise, explicit servers are used.
+  Supports driftfile configuration, time synchronization options,
+  hardware timestamping, client access controls, authentication keys, and logging.
+
 license_file: LICENSE
 tags:
-  - tag1
-  - tag2
-  - tag3
+  - chrony
+  - ntp
+  - ntpd
+  - chronyd
 
-repository: https://github.com/itcultus/<repo>
+repository: https://github.com/itcultus/chrony
 
 dependencies: {}

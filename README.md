@@ -1,47 +1,64 @@
-# itcultus.<what_is_this>
-![Ansible Galaxy](https://img.shields.io/badge/Ansible_Galaxy-itcultus.repo-red?logo=ansible)
+[![Build Status](https://travis-ci.org/oasis-roles/chrony.svg?branch=master)](https://travis-ci.org/oasis-roles/chrony)
 
-## Description
+CHRONY
+===========
 
-DESCRIPTION
+This role manages the configuration of the Chrony NTP service on target hosts. It allows you to:
 
-## Table of Contents
+* Configure NTP servers or server pools (chrony_servers, chrony_pools).
+* Set the driftfile location (chrony_driftfile_path).
+* Control time synchronization behavior such as makestep, rtcsync, hardware timestamping (chrony_makestep_args, chrony_enable_rtcsync, chrony_hwtimestamp_interfaces).
+* Define minimum number of sources, client access networks, and authentication key files (chrony_num_minsources, chrony_ntp_client, chrony_keyfile_path).
+* Configure logging paths and content (chrony_logdir_path, chrony_logged_information).
 
-- [Description](#description)
-- [Contents](#contents)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Contributing](#contributing)
-- [License](#license)
-- [Author Information](#author-information)
+Requirements
+------------
 
-## Contents
+Ansible 2.16 or higher
 
-<Contents>
+Role Variables
+--------------
 
-## Requirements
+Currently the following variables are supported:
 
-<Requirements>
-* Ansible `core >= 2.15`
+| variable | type | default | description |
+|----------|------|----------|-------------|
+| `chrony_package` | string | `chrony` | Package name to install |
+| `chrony_become_user` | string | `root` | User to run commands as |
+| `chrony_servers` | list | `[]` | Explicit list of chrony servers (if set this overrides pools) |
+| `chrony_pools` | list | `['1.pool.chrony.eu','2.pool.chrony.eu','3.pool.chrony.eu','4.pool.chrony.eu']` | Default pool servers |
+| `chrony_driftfile_path` | string | `/var/lib/chrony/drift` | Driftfile storage path |
+| `chrony_makestep_args` | string | `1.0 3` | Arguments passed to chrony makestep |
+| `chrony_enable_rtcsync` | boolean | `true` | Enable kernel synchronization of the RTC |
+| `chrony_hwtimestamp_interfaces` | string | `undefined` | Space separated list of interfaces for hardware timestamping |
+| `chrony_num_minsources` | integer | `undefined` | Minimum number of selectable time sources |
+| `chrony_ntp_client` | string | `undefined` | Local network allowed NTP client access |
+| `chrony_keyfile_path` | string | `undefined` | Path to keys file used for NTP authentication |
+| `chrony_logdir_path` | string | `/var/log/chrony` | Directory where chrony logs are stored |
+| `chrony_logged_information` | string | `undefined` | Space separated list of what information to log |
 
-## Installation
 
-<installation>
+Dependencies
+------------
 
-```bash
-ansible-galaxy collection install <what_is_this>
+None
+
+Example Playbook
+----------------
+
+```
+- hosts: servers
+  roles:
+    - role: itcultus.chrony
 ```
 
-## Contributing
+License
+-------
 
-Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for more detailed guidelines.
+GPLv3
 
-## License
+Author Information
+------------------
 
-This collection is licensed under the **GNU General Public License v3.0**. See 
-the [LICENSE](LICENSE) file for the full text.
-
-## Author Information
-
-This <repo> is maintained by **[Peter Tselios/ITCultus LTD]**
+Peter Tselios  
+ITCultus LTD

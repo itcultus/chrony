@@ -1,0 +1,7 @@
+---
+# Handlers for chrony
+- name: Restart chrony service
+  ansible.builtin.service:
+    state: restarted
+    name: chronyd
+  become: true

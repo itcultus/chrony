@@ -1,0 +1,21 @@
+# roles/chrony/meta/argument_specs.yml
+argument_specs:
+  main:
+    short_description: >-
+      Very simple role which configures NTP servers or pools for the
+      chronyd NTP daemon
+    options:
+      chrony_pools:
+        description: List of pool servers
+        type: list
+        elements: str
+        required: false
+        min_items: 1
+      chrony_servers:
+        description: list of server NTP sources
+        type: list
+        elements: str
+        required: false
+        min_items: 1
+    required_one_of:
+      - [ chrony_pools, chrony_servers ]

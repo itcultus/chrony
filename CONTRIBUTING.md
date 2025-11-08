@@ -1,6 +1,6 @@
-# Contributing to <REPO>
+# Contributing to chrony
 
-Thank you for considering contributing to the `<ROLE/COLLECTION>` We appreciate 
+Thank you for considering contributing to the `chrony role` We appreciate 
 your interest and efforts to make this collection 
 better.
 
@@ -14,7 +14,7 @@ requests, and code contributions.
 ### 1. Reporting Bugs
 
 * Before submitting a new bug report, please check the existing 
-[issues](https://github.com/itcultus/golden_images/issues) to see if the bug has 
+[issues](https://github.com/itcultus/chrony/issues) to see if the bug has 
 already been reported.
 * If not, open a new issue and provide:
     * A clear and concise description of the bug.
@@ -27,7 +27,7 @@ already been reported.
 ### 2. Suggesting Enhancements (Feature Requests)
 
 * Before submitting a new feature request, please check the existing
-[issues](https://github.com/itcultus/golden_images/issues) to see if the feature 
+[issues](https://github.com/itcultus/chrony/issues) to see if the feature 
 has already been requested or is in progress.
 * If not, open a new issue and provide:
     * A clear and concise description of the suggested feature.
@@ -38,12 +38,12 @@ has already been requested or is in progress.
 
 We use GitHub Flow for contributions.
 
-1.  **Fork the repository:** Start by forking the `<REPO>` repository to 
+1.  **Fork the repository:** Start by forking the `chrony` repository to 
 your GitHub account.
 2.  **Clone your fork:**  
 ```bash
-    git clone https://github.com/itcultus/<REPO>.git
-    cd golden_images
+    git clone https://github.com/itcultus/chrony.git
+    cd chrony
 ```
 3.  **Create a new branch:** For each new feature or bug fix, create a new, 
 descriptively named branch.  
@@ -78,7 +78,7 @@ maintainable automation.
     ```
 8.  **Open a Pull Request (PR):**
     * Go to your fork on GitHub and open a new Pull Request.
-    * Target the `main` branch of the original `itcultus/<REPO>` repository.
+    * Target the `main` branch of the original `itcultus/chrony` repository.
     * Provide a detailed description of your changes in the PR description.
     * Reference any related issues (e.g., `Closes #123`).
 

@@ -1,0 +1,30 @@
+---
+
+- name: Validate chrony_servers or chrony_pools are defined
+  ansible.builtin.fail:
+    msg: >
+      You must define at least one NTP server or pool!
+  when:
+    - chrony_servers | default([]) | length == 0
+    - chrony_pools  | default([]) | length == 0
+
+- name: Verify chronyd is installed
+  ansible.builtin.package:
+    name: "{{ chrony_package }}"
+    state: present
+
+- name: Edit chrony config file
+  ansible.builtin.template:
+    src: chrony.conf
+    dest: /etc/chrony.conf
+    mode: "0644"
+    owner: root
+    group: root
+  notify:
+    - Restart chrony service
+
+- name: Enable chronyd service
+  ansible.builtin.service:
+    name: chronyd
+    state: started
+    enabled: true

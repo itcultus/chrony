@@ -1,58 +1,43 @@
 name: Publish to Ansible Galaxy
 
 on:
-  workflow_run:
-    workflows: ["Github release for golden_images"]
-    types:
-      - completed
-    branches:
-      - main
+  push:
+    tags:
+      - 'v*.*.*'
 
 jobs:
   publish:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Ensure tags are fetched
-
-      - name: Check for new tag
-        id: check_tag
-        run: |
-          # Get the tags from the previous workflow run's head SHA
-          HEAD_SHA=${{ github.event.workflow_run.head_sha }}
-          TAG=$(git tag --points-at $HEAD_SHA | grep '^v[0-9]\+\.[0-9]\+\.[0-9]\+$' || echo "")
-          if [[ -n "$TAG" ]]; then
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-            echo "tag_found=true" >> $GITHUB_OUTPUT
-          else
-            echo "tag_found=false" >> $GITHUB_OUTPUT
-          fi
+          fetch-depth: 0
 
       - name: Set up Python
-        if: steps.check_tag.outputs.tag_found == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
       - name: Install Ansible
-        if: steps.check_tag.outputs.tag_found == 'true'
         run: pip install ansible
 
-      - name: Build Ansible Collection
-        if: steps.check_tag.outputs.tag_found == 'true'
-        id: build_collection
+      - name: Run ansible-lint
+        run: ansible-lint .
+
+      - name: Build Role Tarball
+        id: build_role
         run: |
           mkdir -p build
-          ansible-galaxy collection build --output-path build
-          echo "collection_file=build/$(ls build/*.tar.gz | head -n 1 | cut -d '/' -f2)" >> $GITHUB_OUTPUT
+          REPO_NAME=${GITHUB_REPOSITORY##*/}
+          VERSION=${GITHUB_REF#refs/tags/}
+          TAR="build/${REPO_NAME}-${VERSION}.tar.gz"
+          tar -czf "$TAR" "$REPO_NAME"
+          echo "role_file=$TAR" >> "$GITHUB_OUTPUT"
 
       - name: Publish to Ansible Galaxy
-        if: steps.check_tag.outputs.tag_found == 'true'
         env:
           ANSIBLE_GALAXY_API_KEY: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
         run: |
-          ansible-galaxy collection publish ${{ steps.build_collection.outputs.collection_file }} --api-key ${{ env.ANSIBLE_GALAXY_API_KEY }}
+          ansible-galaxy role publish "${{ steps.build_role.outputs.role_file }}" \
+            --api-key "${ANSIBLE_GALAXY_API_KEY}"

@@ -30,10 +30,11 @@ jobs:
         run: |
           CHANGED=$(git diff --name-only origin/main...HEAD)
           echo "$CHANGED"
-          if echo "$CHANGED" | grep -E '^(roles/|plugins/|playbooks/|galaxy.yml|README\.md)'; then
+          if echo "$CHANGED" | grep -E '^(roles/chrony/|meta/|galaxy.yml)'; then
             echo "changed=true" >> $GITHUB_OUTPUT
           else
             echo "changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Check if version differs from main
         id: version_check
@@ -92,17 +93,20 @@ jobs:
           sed -i "s/^version:.*/version: ${NEW_VERSION}/" galaxy.yml
           echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Amend last commit with version bump (same-repo)
+      - name: Amend commit with version bump (same-repo)
         if: steps.handle_pr.outputs.same_repo == 'true' && steps.version_check.outputs.skip == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           NEW_VERSION=${{ steps.bump.outputs.new_version }}
           git add galaxy.yml
-          git commit --amend -m "$(git log -1 --pretty=%B)
+          if ! git diff --cached --quiet; then
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            git commit --amend -m "$(printf "%s\nAuto bump to %s" "$COMMIT_MSG" "$NEW_VERSION")"
+            git push --force-with-lease
+          else
+            echo "No changes to commit; skipping amend"
 
-Auto bump to ${NEW_VERSION}"
-          git push --force-with-lease
 
       - name: Comment on PR (same-repo)
         if: steps.handle_pr.outputs.same_repo == 'true' && steps.version_check.outputs.skip == 'true'
@@ -114,8 +118,8 @@ Auto bump to ${NEW_VERSION}"
           BUMP_TYPE=${{ steps.bump_type.outputs.type }}
           gh pr comment "$PR_NUMBER" --body "Version bumped to ${NEW_VERSION} (${BUMP_TYPE})"
 
-      - name: Forked PR: Fail if bump missing
-        if: steps.handle_pr.outputs.same_repo == 'false' && steps.version_check.outputs.skip != 'false'
+      - name: Forked PR -  Fail if bump missing
+        if: steps.handle_pr.outputs.same_repo == 'false' && steps.version_check.outputs.skip == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

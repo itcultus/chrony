@@ -1,5 +1,4 @@
 # CHANGELOG
 
-[0.0.0] - 2025-01-01
-Fixed: 
-* 
+[1.0.0] - 2025-11-08
+* Initial Version

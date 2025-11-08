@@ -1,83 +1,119 @@
-name: Github release for golden_images
+name: Role Release (create GitHub release)
 
 on:
-  pull_request:
+  workflow_run:
+    workflows: ["Version Bump Enforcement"]
+    types:
+      - completed
     branches:
       - main
-    types:
-      - closed
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
 
 jobs:
-  release:
-    if: github.event.pull_request.merged == true
+  create-release:
     runs-on: ubuntu-latest
-
+    # This job runs either when the bump workflow finishes successfully (workflow_run)
+    # or when a tag matching vX.Y.Z is pushed directly.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for commit messages
+          fetch-depth: 0
 
-      - name: Install yq
-        uses: mikefarah/yq@master
-        with:
-          cmd: yq --version  # Verify installation
-
-      - name: Check commit messages for keywords
-        id: check_commit
+      - name: Resolve tag (workflow_run or push)
+        id: resolve_tag
         run: |
-          # Get all commit messages in the PR
-          COMMIT_MSGS=$(git log ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} --pretty=%B)
-          if [[ "$COMMIT_MSGS" =~ "REL:" || "${{ github.event.pull_request.title }}" =~ "Release" ]]; then
-            echo "do_release=true" >> $GITHUB_OUTPUT
-          else
-            echo "do_release=false" >> $GITHUB_OUTPUT
+          # If triggered by workflow_run, find the tag that points at that run's head SHA
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            HEAD_SHA=${{ github.event.workflow_run.head_sha }}
+            TAG=$(git tag --points-at "$HEAD_SHA" | grep '^v[0-9]\+\.[0-9]\+\.[0-9]\+$' || echo "")
+            if [ -n "$TAG" ]; then
+              echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+              echo "source=workflow_run" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # fallback: attempt to read version from galaxy.yml
+            TAG=""
           fi
 
-      - name: Read version from galaxy.yml
-        if: steps.check_commit.outputs.do_release == 'true'
-        id: get_version
-        run: |
-          VERSION=$(yq '.version' galaxy.yml)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Check if tag exists
-        if: steps.check_commit.outputs.do_release == 'true'
-        id: check_tag
-        run: |
-          if git tag | grep -q "^v${{ steps.get_version.outputs.version }}$"; then
-            echo "tag_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          # If triggered by a push tag event, use GITHUB_REF
+          if [[ "${GITHUB_REF}" =~ ^refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            TAG="${BASH_REMATCH[1]}"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "source=push" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-      - name: Get commit messages for release notes
-        if: steps.check_commit.outputs.do_release == 'true' && steps.check_tag.outputs.tag_exists == 'false'
-        id: release_notes
-        run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$LATEST_TAG" ]; then
-            COMMIT_MSGS=$(git log $LATEST_TAG..HEAD --pretty=%B | sed 's/^[a-zA-Z]\{4\}: /- /')
-          else
-            COMMIT_MSGS=$(git log --pretty=%B | sed 's/^[a-zA-Z]\{4\}: /- /')
+          # Last resort: try to read version from galaxy.yml and find corresponding tag
+          if [ -f galaxy.yml ]; then
+            VERSION=$(grep '^version:' galaxy.yml | awk '{print $2}' || echo "")
+            if [ -n "$VERSION" ]; then
+              TAG="v${VERSION}"
+              if git rev-parse "$TAG" >/dev/null 2>&1; then
+                echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+                echo "source=galaxy_yml" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
           fi
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMIT_MSGS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Create GitHub Release
-        if: steps.check_commit.outputs.do_release == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+          echo "tag=" >> "$GITHUB_OUTPUT"
+          echo "source=none" >> "$GITHUB_OUTPUT"
+
+      - name: Abort if no tag found
+        if: steps.resolve_tag.outputs.tag == ''
+        run: |
+          echo "No semantic tag found to release; exiting."
+          exit 0
+
+      - name: Determine role and namespace
+        id: meta
+        run: |
+          # namespace default: repository owner (use literal 'tpe' if you prefer hardcoding)
+          NAMESPACE=${{ github.repository_owner }}
+          ROLE_NAME=${GITHUB_REPOSITORY##*/}
+          echo "namespace=${NAMESPACE}" >> "$GITHUB_OUTPUT"
+          echo "role_name=${ROLE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes (commit messages)
+        id: notes
+        run: |
+          TAG=${{ steps.resolve_tag.outputs.tag }}
+          # get latest tag before this tag (if any)
+          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            # commits between prev tag (exclusive) and this tag (inclusive)
+            NOTES=$(git log --pretty=format:"- %s" "$PREV_TAG".."$TAG")
+          else
+            NOTES=$(git log --pretty=format:"- %s" "$TAG")
+          fi
+          # fallback if empty
+          if [ -z "$NOTES" ]; then
+            NOTES="- Release $TAG"
+          fi
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          release_name: Release ${{ steps.get_version.outputs.version }}
-          body: ${{ steps.release_notes.outputs.notes }}
+          tag_name: ${{ steps.resolve_tag.outputs.tag }}
+          release_name: Release ${{ steps.resolve_tag.outputs.tag }}
+          body: ${{ steps.notes.outputs.notes }}
           draft: false
           prerelease: false
 
-      - name: Set neutral conclusion if no release
-        if: steps.check_commit.outputs.release == 'false' || steps.check_tag.outputs.tag_exists == 'true'
+      - name: Expose outputs for downstream workflows
+        id: outputs
         run: |
-          echo "::set-output name=workflow_conclusion::neutral"
+          echo "tag=${{ steps.resolve_tag.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          echo "namespace=${{ steps.meta.outputs.namespace }}" >> "$GITHUB_OUTPUT"
+          echo "role_name=${{ steps.meta.outputs.role_name }}" >> "$GITHUB_OUTPUT"

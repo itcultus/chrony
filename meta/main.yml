@@ -1,0 +1,40 @@
+---
+galaxy_info:
+  author: Peter Tselios
+  description: A role that ensures the chronyd service is installed and running
+  company: ITCultus LTD
+  license: GPLv3
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "7"
+        - "8"
+        - "9"
+        - "10"
+
+    - name: Debian
+      versions:
+        - "12"
+        - "13"
+
+    - name: Ubuntu
+      versions:
+        - "22.04"
+        - "24.04"
+
+    - name: SLES
+      versions:
+        - "15"
+
+    - name: opensuse
+      versions:
+        - "15"
+
+  galaxy_tags:
+    - chrony
+    - ntp
+    - ntpd
+    - chronyd
+
+dependencies: []

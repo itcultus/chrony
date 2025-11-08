@@ -1,5 +1,5 @@
 # .github/workflows/ansible-lint.yml
-
+---
 name: Ansible Lint
 
 on:

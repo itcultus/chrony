@@ -1,0 +1,56 @@
+---
+name: Publish to Ansible Galaxy
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish_on_manual_tag_creation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # fetch all history and tags
+
+      - name: Retrieve current tag version
+        id: tag
+        run: |
+          # Determine if this run comes from workflow_run or push
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            # workflow_run: extract version from galaxy.yml
+            TAG=$(grep '^version:' galaxy.yml | awk '{print $2}')
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Extract version from galaxy.yml
+        id: version
+        run: |
+          GALAXY_VERSION=$(grep '^version:' galaxy.yml | awk '{print $2}')
+          echo "galaxy_version=$GALAXY_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Fail if tag != galaxy.yml version
+        run: |
+          TAG=${{ steps.tag.outputs.tag }}
+          GALAXY_VERSION=${{ steps.version.outputs.galaxy_version }}
+          echo "Tag: $TAG, Galaxy version: $GALAXY_VERSION"
+          if [ "$TAG" != "v$GALAXY_VERSION" ]; then
+            echo "Error: Tag version does not match galaxy.yml version."
+            exit 1
+          fi
+
+      - name: Publish role to Galaxy
+        env:
+          ANSIBLE_GALAXY_API_KEY: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
+        run: |
+          REPO_NAME=${GITHUB_REPOSITORY##*/}
+          echo "Publishing role $REPO_NAME version $GALAXY_VERSION"
+          ansible-galaxy role import itcultus "$REPO_NAME" --api-key "$ANSIBLE_GALAXY_API_KEY"

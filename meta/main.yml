@@ -1,0 +1,46 @@
+---
+galaxy_info:
+  author: Peter Tselios
+  description: >-
+    Configures the Chrony NTP service on target hosts.
+    Allows specifying explicit NTP servers or pools. If pools are defined, server
+    entries are ignored. Otherwise, explicit servers are used.
+    Supports driftfile configuration, time synchronization options,
+    hardware timestamping, client access controls, authentication keys, and logging.
+  company: ITCultus LTD
+  license: GPLv3
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "7"
+        - "8"
+        - "9"
+        - "10"
+
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+        - trixie
+
+    - name: Ubuntu
+      versions:
+        - "22.04"
+        - "24.04"
+
+    - name: SLES
+      versions:
+        - "15"
+
+    - name: opensuse
+      versions:
+        - "15"
+
+  galaxy_tags:
+    - chrony
+    - ntp
+    - ntpd
+    - chronyd
+
+dependencies: []

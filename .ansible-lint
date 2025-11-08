@@ -7,3 +7,6 @@ skip_list:
   - var-naming
 
 offline: true
+
+exclude_paths:
+  - .*/

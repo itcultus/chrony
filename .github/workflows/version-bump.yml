@@ -1,0 +1,139 @@
+name: Version Bump Enforcement
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ main ]
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: version-bump-${{ github.ref }}
+      cancel-in-progress: false
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for diffs and commit amend
+
+      - name: Fetch main branch for comparison
+        run: git fetch origin main
+
+      - name: Detect if Ansible collection files changed
+        id: collection_check
+        run: |
+          CHANGED=$(git diff --name-only origin/main...HEAD)
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -E '^(roles/|plugins/|playbooks/|galaxy.yml|README\.md)'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+
+      - name: Check if version differs from main
+        id: version_check
+        if: steps.collection_check.outputs.changed == 'true'
+        run: |
+          CURRENT_VERSION=$(grep '^version:' galaxy.yml | awk '{print $2}')
+          MAIN_VERSION=$(git show origin/main:galaxy.yml | grep '^version:' | awk '{print $2}' || echo "none")
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "main=$MAIN_VERSION" >> $GITHUB_OUTPUT
+          if [ "$CURRENT_VERSION" != "$MAIN_VERSION" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT  # Already bumped
+          else
+            echo "skip=true" >> $GITHUB_OUTPUT   # Needs bump
+
+      - name: Determine bump type
+        id: bump_type
+        if: steps.collection_check.outputs.changed == 'true'
+        run: |
+          COMMITS=$(git log origin/main..HEAD --pretty=format:"%s")
+          if echo "$COMMITS" | grep -q "NEW:"; then
+            echo "type=minor" >> $GITHUB_OUTPUT
+          else
+            echo "type=patch" >> $GITHUB_OUTPUT
+
+      - name: Identify PR source
+        if: steps.collection_check.outputs.changed == 'true'
+        id: handle_pr
+        run: |
+          echo "PR_HEAD=${GITHUB_HEAD_REF}"
+          echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER}"
+          echo "PR_REPO=${{ github.event.pull_request.head.repo.full_name }}"
+
+          if [ "${GITHUB_REPOSITORY_OWNER}" = "${{ github.event.pull_request.head.repo.owner }}" ]; then
+            echo "same_repo=true" >> $GITHUB_OUTPUT
+          else
+            echo "same_repo=false" >> $GITHUB_OUTPUT
+
+      - name: Bump version in galaxy.yml (same-repo)
+        if: steps.handle_pr.outputs.same_repo == 'true' && steps.version_check.outputs.skip == 'true'
+        id: bump
+        run: |
+          VERSION_LINE=$(grep '^version:' galaxy.yml)
+          CURRENT_VERSION=$(echo "$VERSION_LINE" | awk '{print $2}')
+          MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
+
+          if [ "${{ steps.bump_type.outputs.type }}" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          sed -i "s/^version:.*/version: ${NEW_VERSION}/" galaxy.yml
+          echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Amend last commit with version bump (same-repo)
+        if: steps.handle_pr.outputs.same_repo == 'true' && steps.version_check.outputs.skip == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          NEW_VERSION=${{ steps.bump.outputs.new_version }}
+          git add galaxy.yml
+          git commit --amend -m "$(git log -1 --pretty=%B)
+
+Auto bump to ${NEW_VERSION}"
+          git push --force-with-lease
+
+      - name: Comment on PR (same-repo)
+        if: steps.handle_pr.outputs.same_repo == 'true' && steps.version_check.outputs.skip == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          NEW_VERSION=${{ steps.bump.outputs.new_version }}
+          BUMP_TYPE=${{ steps.bump_type.outputs.type }}
+          gh pr comment "$PR_NUMBER" --body "Version bumped to ${NEW_VERSION} (${BUMP_TYPE})"
+
+      - name: Forked PR: Fail if bump missing
+        if: steps.handle_pr.outputs.same_repo == 'false' && steps.version_check.outputs.skip != 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          BUMP_TYPE=${{ steps.bump_type.outputs.type }}
+          MAIN_VERSION=$(git show origin/main:galaxy.yml | grep '^version:' | awk '{print $2}' || echo "0.0.0")
+          MAJOR=$(echo "$MAIN_VERSION" | cut -d. -f1)
+          MINOR=$(echo "$MAIN_VERSION" | cut -d. -f2)
+          PATCH=$(echo "$MAIN_VERSION" | cut -d. -f3)
+
+          if [ "$BUMP_TYPE" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          SUGGESTED_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          gh pr comment "$PR_NUMBER" --body "Collection changes detected but galaxy.yml version not bumped. Suggested bump: ${SUGGESTED_VERSION} (${BUMP_TYPE})"
+          echo "Collection changes detected but version not bumped. Failing workflow to block merge."
+          exit 1

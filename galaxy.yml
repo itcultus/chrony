@@ -1,0 +1,19 @@
+---
+# galaxy.yml
+namespace: itcultus
+name: <>
+version: 0.0.0
+readme: README.md
+authors:
+  - Peter Tselios <myemail@mycompany.com>
+description: >-
+  A collection for <>
+license_file: LICENSE
+tags:
+  - tag1
+  - tag2
+  - tag3
+
+repository: https://github.com/itcultus/<repo>
+
+dependencies: {}

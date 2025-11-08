@@ -1,0 +1,83 @@
+name: Github release for golden_images
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for commit messages
+
+      - name: Install yq
+        uses: mikefarah/yq@master
+        with:
+          cmd: yq --version  # Verify installation
+
+      - name: Check commit messages for keywords
+        id: check_commit
+        run: |
+          # Get all commit messages in the PR
+          COMMIT_MSGS=$(git log ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} --pretty=%B)
+          if [[ "$COMMIT_MSGS" =~ "REL:" || "${{ github.event.pull_request.title }}" =~ "Release" ]]; then
+            echo "do_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "do_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Read version from galaxy.yml
+        if: steps.check_commit.outputs.do_release == 'true'
+        id: get_version
+        run: |
+          VERSION=$(yq '.version' galaxy.yml)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if tag exists
+        if: steps.check_commit.outputs.do_release == 'true'
+        id: check_tag
+        run: |
+          if git tag | grep -q "^v${{ steps.get_version.outputs.version }}$"; then
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get commit messages for release notes
+        if: steps.check_commit.outputs.do_release == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+        id: release_notes
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LATEST_TAG" ]; then
+            COMMIT_MSGS=$(git log $LATEST_TAG..HEAD --pretty=%B | sed 's/^[a-zA-Z]\{4\}: /- /')
+          else
+            COMMIT_MSGS=$(git log --pretty=%B | sed 's/^[a-zA-Z]\{4\}: /- /')
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MSGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: steps.check_commit.outputs.do_release == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: false
+
+      - name: Set neutral conclusion if no release
+        if: steps.check_commit.outputs.release == 'false' || steps.check_tag.outputs.tag_exists == 'true'
+        run: |
+          echo "::set-output name=workflow_conclusion::neutral"
